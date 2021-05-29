@@ -11,6 +11,7 @@ import pandas as pd
 import akshare as ak
 
 DEBUG = 0
+USE_DATABASE = 0
 
 def getRoot():
     rootPath = os.path.dirname( os.path.realpath(__file__) )
@@ -59,7 +60,7 @@ def get_detailed_df(row, start_date, end_date, adjust):
     df.set_index(pd.Index(range(0, len(df.index))), inplace=True)
     
     res_df = pd.DataFrame()
-    requited_columns = ['date', 'open', 'close', 'volume']
+    requited_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
     res_df[requited_columns] = df[requited_columns]
     
     def get_macd(close, short = 12, long = 26, mid = 9):
@@ -147,7 +148,7 @@ list_df = pd.DataFrame()
 detailed_dfs = {}
 illed_codes = [] #recording problems
 
-if (current_sync_date.date() == last_sync_date.date()):
+if (current_sync_date.date() == last_sync_date.date() or USE_DATABASE):
     # up to date, just read from file
     print('*** sync lists from database ***')
     list_df = pd.read_csv(list_file_path)
@@ -159,12 +160,12 @@ else:
     list_df.to_csv(list_file_path, index=False)
 
 if DEBUG:
-    debug_count = 1000
+    debug_count = 100
     list_df = list_df.head(debug_count)
 
 # 2. sync detailed info
 # each detailed stock intf has at least 4 columns: date, close, macd, volumn 
-if (current_sync_date.date() == last_sync_date.date()):    
+if (current_sync_date.date() == last_sync_date.date() or USE_DATABASE):    
     print('*** sync details from database ***')
     # up to date, just read from file
     count = len(list_df)
@@ -173,11 +174,8 @@ if (current_sync_date.date() == last_sync_date.date()):
         code = row['code']
         code_file_path = database_path + str(code) + ".csv"
         code_df = pd.read_csv(code_file_path)
+        code_df['date'] = pd.to_datetime(code_df['date'])
         detailed_dfs[code] = code_df
-        
-        if DEBUG:
-            current += 1
-            print('{}\t / {}\r'.format(current, count))
 else:
     print('*** sync details from network ***')
     count = len(list_df)
@@ -192,9 +190,6 @@ else:
             code_df.to_csv(code_file_path, index=False)
         except:
             illed_codes.append(code)
-        if DEBUG:
-            current += 1
-            print('{}\t / {}\r'.format(current, count))
     print('\n')
 
 # deal with illed stocks
@@ -223,15 +218,23 @@ print('\n\n*** core calculation start ***')
 # - filter
 candidates = []
 def macd_filter(code):
-    return True
+    df = detailed_dfs[code]
+    close_column = df['close']
+    open_column = df['open']
+    dif = df['dif']
+    macd = df['macd']
+    try:
+        if (close_column[0] > open_column[0]) and dif[0] < 0 and macd[0] > 0:
+            return True
+    except:
+        return False
+    return False
 def volumne_filter(code):
     if DEBUG:
         print('*** volumn check for {} ***'.format(code))
     df = detailed_dfs[code]
     volume_column = df['volume']
-    if DEBUG:
-        print('1st row {}'.format(volume_column[0]))
-        print('2nd row {}'.format(volume_column[1]))
+
     try:
         if volume_column[0] > (volume_column[1] * 3):
             return True
@@ -285,4 +288,74 @@ def dumpToHtml(code_list):
     fout.write('</body>\n</html>\n')
     fout.close()
 
-dumpToHtml(candidates)
+#dumpToHtml(candidates)
+
+def dumpToJson(code_list):
+    json_file = "snapshot.json"
+    fout = open(json_file, "w", encoding='utf-8')
+    fout.write('{\n')
+    lst_len = len(code_list)
+    for i in range(lst_len):
+        code = code_list[i]
+        df = detailed_dfs[code]
+        if len(df) < 40:
+            continue
+        df = df.head(30).iloc[::-1]
+        
+        # use code as key, type is string
+        fout.write('\t"{}" : '.format(code))
+        fout.write('{\n')
+        # value as object
+        name = list_df[list_df['code']==code]['name'].iloc[0]
+        fout.write('\t\t"name" : "{}"'.format(name))
+        fout.write(',\n')
+        
+        prefix = list_df[list_df['code']==code]['prefix'].iloc[0]
+        fout.write('\t\t"prefix" : "{}"'.format(prefix))
+        fout.write(',\n')
+        
+        date_list = [datetime.datetime.strftime(d, datetime_format) for d in df['date'].to_list()]
+        fout.write('\t\t"date" : {}'.format(date_list))
+        fout.write(',\n')
+        
+        open_list = df['open'].to_numpy().tolist()
+        fout.write('\t\t"open" : {}'.format(open_list))
+        fout.write(',\n')
+        
+        high_list = df['high'].to_numpy().tolist()
+        fout.write('\t\t"high" : {}'.format(high_list))
+        fout.write(',\n')
+        
+        low_list = df['low'].to_numpy().tolist()
+        fout.write('\t\t"low" : {}'.format(low_list))
+        fout.write(',\n')
+        
+        close = df['close'].to_numpy().tolist()
+        fout.write('\t\t"close" : {}'.format(close))
+        fout.write(',\n')
+        
+        dif = df['dif'].to_numpy().tolist()
+        fout.write('\t\t"dif" : {}'.format(dif))
+        fout.write(',\n')
+        
+        dea = df['dea'].to_numpy().tolist()
+        fout.write('\t\t"dea" : {}'.format(dea))
+        fout.write(',\n')
+        
+        macd = df['macd'].to_numpy().tolist()
+        fout.write('\t\t"macd" : {}'.format(macd))
+        fout.write(',\n')
+        
+        volume = df['volume'].to_numpy().tolist()
+        fout.write('\t\t"volume" : {}'.format(volume))        
+        fout.write('\n')
+        
+        print('i: {} / len: {}'.format(i, lst_len))
+        if (i == (lst_len - 1)):
+            fout.write("\t}\n")
+        else:
+            fout.write("\t},\n")
+    fout.write('}')
+    fout.close()
+    
+dumpToJson(candidates)

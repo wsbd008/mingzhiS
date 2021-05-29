@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+    <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+      <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
+      <script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
+      <script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+    </head>
+    <style>
+      .kchart {
+      width: 100%;
+      height: 300px;
+      }
+    </style>
+    <script>
+      const loadJSON = (callback) => {
+          const xObj = new XMLHttpRequest();
+          xObj.overrideMimeType("application/json");
+          // 1. replace './data.json' with the local path of your file
+          xObj.open('GET', './snapshot.json', true);
+          xObj.onreadystatechange = () => {
+              if (xObj.readyState === 4 && xObj.status === 200) {
+
+                  // 2. call your callback function
+                  callback(xObj.responseText);
+              }
+          };
+          xObj.send(null);
+      }
+
+      am4core.ready(function() {
+          am4core.useTheme(am4themes_animated);
+          loadJSON((response) => {
+              // 3. parse JSON string into JSON Object
+              console.log(response)
+              response = response.replace(/'/g, '"');
+              console.log(response)
+              const myObj = JSON.parse(response);
+              console.log('your local JSON =', myObj)
+
+              // 4. render to your page
+              var txt = '';
+              txt += "<table border='1'>";
+              txt += "<tr>";
+              txt += "<th>code</th>";
+              txt += "<th>name</th>";
+              txt += "<th>link</th>";
+              txt += "<th>details</th>";
+              txt += "</tr>";
+              
+              for(var k in myObj){
+                  txt += "<tr>";
+                  txt += "<td>" + k + "</td>";
+                  txt += "<td>" + myObj[k].name + "</td>";
+                  txt += "<td>" + "<a href=\"https://xueqiu.com/S/" + myObj[k].prefix + k + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + "link" + "</a>" + "</td>";
+
+                  txt += "<td>" + "<div class=\"kchart\" id=\"dk" + k + "\">" + "</div>";
+                  txt += "<div class=\"kchart\" id=\"macd" + k + "\">" + "</div>" + "</td>";
+                  //txt += "<div class=\"kchart\" id=\"volume" + k + "\">" + "</div>" + "</td>";
+                  txt += "</tr>";
+              }
+              txt += "</table>";
+
+              document.getElementById("demo").innerHTML = txt;
+              // begin ohlc chart
+              for (var k in myObj){
+                  // prepare data
+                  var dk_data = [];
+                  var macd_data = [];
+                  var volume_data = [];
+                  for (i = 0; i < myObj[k].date.length; i++)
+                  {
+                      var dk_entry = {
+                          "date" : myObj[k].date[i],
+                          "open" : myObj[k].open[i].toString(),
+                          "high" : myObj[k].high[i].toString(),
+                          "low" : myObj[k].low[i].toString(),
+                          "close" : myObj[k].close[i].toString(),
+                          "volume" : myObj[k].volume[i].toString()
+                      };
+                      dk_data.push(dk_entry);
+                      var macd_entry = {
+                          "date" : myObj[k].date[i],
+                          "macd" : myObj[k].macd[i].toString(),
+                          "dif" : myObj[k].dif[i].toString(),
+                          "dea" : myObj[k].dea[i].toString()
+                      };
+                      macd_data.push(macd_entry);
+                      var volume_entry = {
+                          "date" : myObj[k].date[i],
+                          "volume" : myObj[k].volume[i].toString()
+                      };
+                  }
+
+                  dkid = "dk" + k;
+                  var chart = am4core.create(dkid, am4charts.XYChart);
+                  chart.padding(0, 15, 0, 15);
+                  chart.leftAxesContainer.layout = "vertical";
+                  chart.dateFormatter.inputDateFormat = "yyyy/MM/dd";
+
+                  var dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+                  dateAxis.renderer.grid.template.location = 0;
+                  dateAxis.renderer.grid.template.location = 0;
+                  dateAxis.renderer.ticks.template.length = 8;
+                  dateAxis.renderer.ticks.template.strokeOpacity = 0.1;
+                  dateAxis.renderer.grid.template.disabled = true;
+                  dateAxis.renderer.ticks.template.disabled = false;
+                  dateAxis.renderer.ticks.template.strokeOpacity = 0.2;
+                  dateAxis.renderer.minLabelPosition = 0.01;
+                  dateAxis.renderer.maxLabelPosition = 0.99;
+                  dateAxis.keepSelection = true;
+                  dateAxis.minHeight = 30;
+
+                  dateAxis.groupData = true;
+                  dateAxis.minZoomCount = 5;
+
+                  var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+                  valueAxis.tooltip.disabled = true;
+                  valueAxis.zIndex = 1;
+                  valueAxis.renderer.baseGrid.disabled = true;
+                  valueAxis.height = am4core.percent(65);
+
+                  valueAxis.renderer.gridContainer.background.fill = am4core.color("#000000");
+                  valueAxis.renderer.gridContainer.background.fillOpacity = 0.05;
+                  valueAxis.renderer.inside = true;
+                  valueAxis.renderer.labels.template.verticalCenter = "bottom";
+                  valueAxis.renderer.labels.template.padding(2, 2, 2, 2);
+
+                  valueAxis.renderer.fontSize = "0.8em"
+
+                  var series = chart.series.push(new am4charts.CandlestickSeries());
+                  series.dataFields.dateX = "date";
+                  series.dataFields.valueY = "close";
+                  series.dataFields.openValueY = "open";
+                  series.dataFields.lowValueY = "low";
+                  series.dataFields.highValueY = "high";
+                  series.clustered = false;
+                  series.tooltipText = "Open: {openValueY.value}\nLow: {lowValueY.value}\nHigh:{highValueY.value}\nClose: {valueY.value}";
+                  series.name = "MSFT";
+                  series.defaultState.transitionDuration = 0;
+
+                  var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
+                  valueAxis2.tooltip.disabled = true;
+                  valueAxis2.height = am4core.percent(35);
+                  valueAxis2.zIndex = 3;
+
+                  valueAxis2.marginTop = 30;
+                  valueAxis2.renderer.baseGrid.disabled = true;
+                  valueAxis2.renderer.inside = true;
+                  valueAxis2.renderer.labels.template.verticalCenter = "bottom";
+                  valueAxis2.renderer.labels.template.padding(2, 2, 2, 2);
+                  valueAxis2.renderer.fontSize = "0.8em";
+
+                  var series2 = chart.series.push(new am4charts.ColumnSeries());
+                  series2.dataFields.dateX = "date";
+                  series2.clustered = false;
+                  series2.dataFields.valueY = "volume";
+                  series2.yAxis = valueAxis2;
+                  series2.tooltipText = "{valueY.value}";
+                  series2.name = "Series 2";
+                  series2.groupFields.valueY = "sum";
+                  series2.defaultState.transitionDuration = 0;                      
+
+                  chart.cursor = new am4charts.XYCursor();
+                  chart.data = dk_data;
+                  // end day k chart
+
+                  // begin bar and line chart
+                  macdid = "macd" + k;
+                  var macd_chart = am4core.create(macdid, am4charts.XYChart);
+                  macd_chart.dateFormatter.inputDateFormat = "yyyy/MM/dd";
+                  macd_chart.data = macd_data;
+
+                  //create category axis for years
+                  var categoryAxis = macd_chart.xAxes.push(new am4charts.CategoryAxis());
+                  categoryAxis.dataFields.category = "date";
+
+                  //create value axis for income and expenses
+                  var valueAxis = macd_chart.yAxes.push(new am4charts.ValueAxis());
+
+                  //create columns
+                  var series = macd_chart.series.push(new am4charts.ColumnSeries());
+                  series.dataFields.categoryX = "date";
+                  series.dataFields.valueY = "macd";
+                  series.name = "macd";
+                  series.columns.template.fillOpacity = 0.5;
+                  series.columns.template.strokeOpacity = 0;
+                  series.tooltipText = "macd: {valueY.value}";
+
+                  // bullet is added because we add tooltip to a bullet for it to change color
+                  var bullet = series.bullets.push(new am4charts.Bullet());
+                  bullet.tooltipText = "{valueY}";
+
+                  bullet.adapter.add("fill", function(fill, target){
+                          if(target.dataItem.valueY > 0){
+                              return am4core.color("#FF0000");
+                          } else {
+                              return am4core.color("#00FF00");
+                          }
+                          return fill;
+                      })
+                  //create dif and dea line
+                  var difSeries = macd_chart.series.push(new am4charts.LineSeries());
+                  difSeries.dataFields.categoryX = "date";
+                  difSeries.dataFields.valueY = "dif";
+                  difSeries.name = "dif";
+                  difSeries.strokeWidth = 1;
+                  difSeries.tooltipText = "dif: {valueY.value}";
+
+                  var deaSeries = macd_chart.series.push(new am4charts.LineSeries());
+                  deaSeries.dataFields.categoryX = "date";
+                  deaSeries.dataFields.valueY = "dea";
+                  deaSeries.name = "dea";
+                  deaSeries.strokeWidth = 1;
+                  deaSeries.tooltipText = "dea: {valueY.value}";
+
+                  macd_chart.cursor = new am4charts.XYCursor();
+                  // end macd chart
+              }
+
+          });
+      });
+
+    </script>
+
+  <body>
+    <section id="demo">xx</section>
+  </body>
+  
+</html>
