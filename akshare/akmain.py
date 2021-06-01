@@ -9,6 +9,8 @@ import os
 import datetime
 import pandas as pd
 import akshare as ak
+import json
+import io
 
 DEBUG = 0
 USE_DATABASE = 0
@@ -55,9 +57,9 @@ def get_detailed_df(row, start_date, end_date, adjust):
     symbol = row['prefix'] + row['code']
     df = ak.stock_zh_a_daily(symbol, start_date, end_date, adjust)
     # adjust index and date
-    df['date'] = df.index
+    #df['date'] = df.index
     df['date'] = pd.to_datetime(df['date'])
-    df.set_index(pd.Index(range(0, len(df.index))), inplace=True)
+    #df.set_index(pd.Index(range(0, len(df.index))), inplace=True)
     
     res_df = pd.DataFrame()
     requited_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
@@ -106,7 +108,7 @@ main logic
 ##############################################################################
 # - sync database: check containing folder and last sync record
 
-__database_flag_path__ = '\\database\\'
+__database_flag_path__ = '/database/'
 __database_flag_file__ = 'last-sync-record.txt'
 __start_date__ = '2020/01/01'
 
@@ -209,7 +211,6 @@ if DEBUG:
 
 # TODO: dump a snapshot of lists? details?
 
-print('\n\n*** core calculation start ***')
 ##############################################################################
 # - do calculation
 
@@ -264,7 +265,8 @@ print(candidates)
 # output to html
 def dumpToHtml(code_list):
     html_file = 'stock-output.html'
-    fout = open(html_file, "w")
+    #fout = open(html_file, "w")
+    fout = io.StringIO('');
     fout.write('<!DOCTYPE html>\n')
     fout.write('<html>\n<body>\n')
     fout.write('<table border="1">\n')
@@ -315,7 +317,7 @@ def dumpToJson(code_list):
         fout.write(',\n')
         
         date_list = [datetime.datetime.strftime(d, datetime_format) for d in df['date'].to_list()]
-        fout.write('\t\t"date" : {}'.format(date_list))
+        fout.write('\t\t"date" : {}'.format(json.dumps(date_list)))
         fout.write(',\n')
         
         open_list = df['open'].to_numpy().tolist()
@@ -350,7 +352,8 @@ def dumpToJson(code_list):
         fout.write('\t\t"volume" : {}'.format(volume))        
         fout.write('\n')
         
-        print('i: {} / len: {}'.format(i, lst_len))
+        if DEBUG:
+            print('i: {} / len: {}'.format(i, lst_len))
         if (i == (lst_len - 1)):
             fout.write("\t}\n")
         else:
