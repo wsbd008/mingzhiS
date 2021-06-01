@@ -12,7 +12,6 @@ import akshare as ak
 import tushare as ts
 import multiprocessing
 import json
-import io
 
 DEBUG = 0
 USE_DATABASE = 0
@@ -21,6 +20,10 @@ USE_MULTITHREAD = 1
 def getRoot():
     rootPath = os.path.dirname( os.path.realpath(__file__) )
     return rootPath
+
+def get_database_path():
+    __database_path__ = '/../database/'
+    return getRoot() + __database_path__
 
 # list_df has at least prefix('sh' or 'sz'), code, name
 def ak_get_list_df():
@@ -158,7 +161,7 @@ def get_detailed_df_with_pool():
     start_date = last_sync_date
     end_date = current_sync_date
     adjust = 'qfq'
-    database_path = getRoot() + __database_flag_path__
+    database_path = get_database_path()
     
     pool = multiprocessing.Pool(multiprocessing.cpu_count())
     manager = multiprocessing.Manager()
@@ -197,7 +200,7 @@ def volumne_filter(code):
     return False
     
 def dumpToJson(code_list):
-    json_file = "snapshot.json"
+    json_file = "../snapshot/snapshot.json"
     fout = open(json_file, "w", encoding='utf-8')
     fout.write('{\n')
     lst_len = len(code_list)
@@ -264,7 +267,40 @@ def dumpToJson(code_list):
             fout.write("\t},\n")
     fout.write('}')
     fout.close()
-         
+
+def database_is_valid():
+    __database_flag_file__ = 'last-sync-record.txt'
+    __start_date__ = '2020/01/01'
+    
+    database_path = get_database_path()
+    if (not os.path.exists(database_path)):
+        if DEBUG:
+            print('\tdababase path {} does not exists, make it...'.format(database_path))
+        os.makedirs(database_path)
+    
+    database_flag_file = database_path + __database_flag_file__
+    if (not os.path.exists(database_flag_file)):
+        if DEBUG:
+            print('\tdababase sync record file {} does not exists, make it...'.format(database_flag_file))
+        fout = open(database_flag_file, "w")
+        fout.write(__start_date__)
+        fout.close()
+        return False
+
+    fin = open(database_flag_file, "r")
+    last_sync_date_str = fin.readline()
+    fin.close()
+
+    datetime_format = "%Y/%m/%d"
+    last_sync_date = datetime.datetime.strptime(last_sync_date_str, datetime_format)
+    current_sync_date = datetime.datetime.now()
+    
+    if (current_sync_date.date() == last_sync_date.date()):
+        return True
+    else:
+        return False
+    
+    
 ##############################################################################
 """
 main logic
@@ -277,11 +313,10 @@ main logic
 ##############################################################################
 # - sync database: check containing folder and last sync record
 if __name__ == "__main__":
-    __database_flag_path__ = '/database/'
     __database_flag_file__ = 'last-sync-record.txt'
     __start_date__ = '2020/01/01'
     
-    database_path = getRoot() + __database_flag_path__
+    database_path = get_database_path()
     if (not os.path.exists(database_path)):
         if DEBUG:
             print('\tdababase path {} does not exists, make it...'.format(database_path))
@@ -310,7 +345,7 @@ if __name__ == "__main__":
     2. sync detailed info, saved in a map: detailed_dfs, use code as key
     """
     __list_file__ = "list.csv"
-    list_file_path = database_path + __list_file__
+    list_file_path = get_database_path() + __list_file__
     
     
     # 1. sync lists and basic info
