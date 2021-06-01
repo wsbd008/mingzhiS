@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+    <head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+      <script src="https://cdn.amcharts.com/lib/4/core.js"></script>
+      <script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
+      <script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+    </head>
+    <style>
+      .kchart {
+      width: 100%;
+          height: 500px;
+      }
+      .macdchart {
+      width: 100%;
+      height: 300px;
+      }
+table{
+    margin:0 auto;
+}
+    </style>
+    <script>
+      am4core.ready(function() {
+          am4core.useTheme(am4themes_animated);
+          fetch('snapshot.json')
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function (data) {
+                  //console.log(data);
+                  display_json(data);
+              })
+              .catch(function (err) {
+                  console.log('error: ' + err);
+              });
+      });
+
+function display_json(myObj)
+{
+    var txt = '';
+    txt += "<table border='1' width=80%>";
+    txt += "<tr>";
+    txt += "<th>code</th>";
+    txt += "<th>name</th>";
+    txt += "<th>link</th>";
+    txt += "<th>k-chart</th>";
+    txt += "</tr>";
+    
+    for(var k in myObj){
+        txt += "<tr>";
+        txt += "<td>" + k + "</td>";
+        txt += "<td>" + myObj[k].name + "</td>";
+        txt += "<td>" + "<a href=\"https://xueqiu.com/S/" + myObj[k].prefix + k + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + "link" + "</a>" + "</td>";
+
+        txt += "<td>" + "<div class=\"kchart\" id=\"dk" + k + "\">" + "</div>" + "</td>";
+        //txt += "<div class=\"macdchart\" id=\"macd" + k + "\">" + "</div>" + "</td>";
+        //txt += "<div class=\"kchart\" id=\"volume" + k + "\">" + "</div>" + "</td>";
+        txt += "</tr>";
+    }
+    txt += "</table>";
+
+    document.getElementById("demo").innerHTML = txt;
+    // begin ohlc chart
+    for (var k in myObj){
+        // prepare data
+        var dk_data = [];
+        var macd_data = [];
+        var volume_data = [];
+        for (i = 0; i < myObj[k].date.length; i++)
+        {
+            var dk_entry = {
+                "date" : myObj[k].date[i],
+                "open" : myObj[k].open[i].toString(),
+                "high" : myObj[k].high[i].toString(),
+                "low" : myObj[k].low[i].toString(),
+                "close" : myObj[k].close[i].toString(),
+                "volume" : myObj[k].volume[i].toString(),
+                "macd" : myObj[k].macd[i].toString(),
+                "dif" : myObj[k].dif[i].toString(),
+                "dea" : myObj[k].dea[i].toString()
+            };
+            dk_data.push(dk_entry);
+        }
+
+        dkid = "dk" + k;
+        var chart = am4core.create(dkid, am4charts.XYChart);
+        chart.padding(0, 15, 0, 15);
+        chart.leftAxesContainer.layout = "vertical";
+        chart.dateFormatter.inputDateFormat = "yyyy/MM/dd";
+
+        var dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+        dateAxis.renderer.grid.template.location = 0;
+        dateAxis.renderer.grid.template.location = 0;
+        dateAxis.renderer.ticks.template.length = 8;
+        dateAxis.renderer.ticks.template.strokeOpacity = 0.1;
+        dateAxis.renderer.grid.template.disabled = true;
+        dateAxis.renderer.ticks.template.disabled = false;
+        dateAxis.renderer.ticks.template.strokeOpacity = 0.2;
+        dateAxis.renderer.minLabelPosition = 0.01;
+        dateAxis.renderer.maxLabelPosition = 0.99;
+        dateAxis.keepSelection = true;
+        dateAxis.minHeight = 30;
+
+        dateAxis.groupData = true;
+        dateAxis.minZoomCount = 5;
+
+        var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        valueAxis.tooltip.disabled = true;
+        valueAxis.zIndex = 1;
+        valueAxis.renderer.baseGrid.disabled = true;
+        valueAxis.height = am4core.percent(50);
+
+        valueAxis.renderer.gridContainer.background.fill = am4core.color("#000000");
+        valueAxis.renderer.gridContainer.background.fillOpacity = 0.05;
+        valueAxis.renderer.inside = true;
+        valueAxis.renderer.labels.template.verticalCenter = "bottom";
+        valueAxis.renderer.labels.template.padding(2, 2, 2, 2);
+
+        valueAxis.renderer.fontSize = "0.8em"
+
+        var series = chart.series.push(new am4charts.CandlestickSeries());
+        series.dataFields.dateX = "date";
+        series.dataFields.valueY = "close";
+        series.dataFields.openValueY = "open";
+        series.dataFields.lowValueY = "low";
+        series.dataFields.highValueY = "high";
+        series.clustered = false;
+        series.tooltipText = "Open: {openValueY.value}\nLow: {lowValueY.value}\nHigh:{highValueY.value}\nClose: {valueY.value}";
+        series.name = "MSFT";
+        series.defaultState.transitionDuration = 0;
+
+        var valueAxis2 = chart.yAxes.push(new am4charts.ValueAxis());
+        valueAxis2.tooltip.disabled = true;
+        valueAxis2.height = am4core.percent(25);
+        valueAxis2.zIndex = 3;
+
+        valueAxis2.marginTop = 30;
+        valueAxis2.renderer.baseGrid.disabled = true;
+        valueAxis2.renderer.inside = true;
+        valueAxis2.renderer.labels.template.verticalCenter = "bottom";
+        valueAxis2.renderer.labels.template.padding(2, 2, 2, 2);
+        valueAxis2.renderer.fontSize = "0.8em";
+
+        var series2 = chart.series.push(new am4charts.ColumnSeries());
+        series2.dataFields.dateX = "date";
+        series2.clustered = false;
+        series2.dataFields.valueY = "volume";
+        series2.yAxis = valueAxis2;
+        series2.tooltipText = "volume: {valueY.value}";
+        series2.name = "Series 2";
+        series2.groupFields.valueY = "sum";
+        series2.defaultState.transitionDuration = 0;                      
+
+        var valueAxis3 = chart.yAxes.push(new am4charts.ValueAxis());
+        valueAxis3.tooltip.disabled = true;
+        valueAxis3.height = am4core.percent(25);
+        valueAxis3.zIndex = 3;
+
+        valueAxis3.marginTop = 30;
+        valueAxis3.renderer.baseGrid.disabled = true;
+        valueAxis3.renderer.inside = true;
+        valueAxis3.renderer.labels.template.verticalCenter = "bottom";
+        valueAxis3.renderer.labels.template.padding(2, 2, 2, 2);
+        valueAxis3.renderer.fontSize = "0.8em";
+
+        var series3 = chart.series.push(new am4charts.ColumnSeries());
+        series3.dataFields.dateX = "date";
+        series3.clustered = false;
+        series3.dataFields.valueY = "macd";
+        series3.yAxis = valueAxis3;
+        series3.tooltipText = "macd: {valueY.value}";
+        series3.name = "Series 3";
+        series3.groupFields.valueY = "sum";
+        series3.defaultState.transitionDuration = 0;
+
+        var series_dif = chart.series.push(new am4charts.LineSeries());
+        series_dif.dataFields.dateX = "date";
+        series_dif.clustered = false;
+        series_dif.dataFields.valueY = "dif";
+        series_dif.yAxis = valueAxis3;
+        series_dif.tooltipText = "dif: {valueY.value}";
+        series_dif.name = "Series dif";
+        series_dif.groupFields.valueY = "sum";
+        series_dif.defaultState.transitionDuration = 0;
+        
+        var series_dea = chart.series.push(new am4charts.LineSeries());
+        series_dea.dataFields.dateX = "date";
+        series_dea.clustered = false;
+        series_dea.dataFields.valueY = "dea";
+        series_dea.yAxis = valueAxis3;
+        series_dea.tooltipText = "dea: {valueY.value}";
+        series_dea.name = "Series dea";
+        series_dea.groupFields.valueY = "sum";
+        series_dea.defaultState.transitionDuration = 0;
+
+        chart.cursor = new am4charts.XYCursor();
+        chart.data = dk_data;
+        // end day k chart
+    }
+}
+    </script>
+
+  <body>
+    <section id="demo">loading...</section>
+  </body>
+  
+</html>

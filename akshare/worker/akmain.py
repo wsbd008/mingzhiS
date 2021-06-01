@@ -11,8 +11,10 @@ import pandas as pd
 import akshare as ak
 import tushare as ts
 import multiprocessing
+import json
+import io
 
-DEBUG = 1
+DEBUG = 0
 USE_DATABASE = 0
 USE_MULTITHREAD = 1
 
@@ -58,9 +60,9 @@ def ak_get_detailed_df(row, start_date, end_date, adjust):
     symbol = row['prefix'] + row['code']
     df = ak.stock_zh_a_daily(symbol, start_date, end_date, adjust)
     # adjust index and date
-    df['date'] = df.index
+    #df['date'] = df.index
     df['date'] = pd.to_datetime(df['date'])
-    df.set_index(pd.Index(range(0, len(df.index))), inplace=True)
+    #df.set_index(pd.Index(range(0, len(df.index))), inplace=True)
     
     res_df = pd.DataFrame()
     requited_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
@@ -219,7 +221,7 @@ def dumpToJson(code_list):
         fout.write(',\n')
         
         date_list = [datetime.datetime.strftime(d, datetime_format) for d in df['date'].to_list()]
-        fout.write('\t\t"date" : {}'.format(date_list))
+        fout.write('\t\t"date" : {}'.format(json.dumps(date_list)))
         fout.write(',\n')
         
         open_list = df['open'].to_numpy().tolist()
@@ -254,7 +256,8 @@ def dumpToJson(code_list):
         fout.write('\t\t"volume" : {}'.format(volume))        
         fout.write('\n')
         
-        print('i: {} / len: {}'.format(i, lst_len))
+        if DEBUG:
+            print('i: {} / len: {}'.format(i, lst_len))
         if (i == (lst_len - 1)):
             fout.write("\t}\n")
         else:
@@ -274,7 +277,7 @@ main logic
 ##############################################################################
 # - sync database: check containing folder and last sync record
 if __name__ == "__main__":
-    __database_flag_path__ = '\\database\\'
+    __database_flag_path__ = '/database/'
     __database_flag_file__ = 'last-sync-record.txt'
     __start_date__ = '2020/01/01'
     
