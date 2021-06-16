@@ -5,7 +5,7 @@ Created on Tue May  4 11:40:01 2021
 @author: yuduo
 """
 
-import os
+import os, io
 import datetime
 import pandas as pd
 import akshare as ak
@@ -13,6 +13,7 @@ import tushare as ts
 import multiprocessing
 import json
 import logging
+import time
 
 DEBUG = 0
 USE_DATABASE = 0
@@ -103,15 +104,6 @@ def ak_get_detailed_df(row, start_date, end_date, adjust):
     res_df.set_index(pd.Index(range(0, len(res_df.index))), inplace=True)
     return  res_df
 
-def tu_get_realtime_df():
-    df = ts.get_today_all()    
-    df['close'] = df['trade']
-    res_df = pd.DataFrame()
-    required_columns = ['open', 'high', 'low', 'close', 'volume']
-    res_df[required_columns] = df[required_columns]
-    
-    return res_df
-
 def tu_get_detailed_df(row, start_date, end_date, adjust, database_path):
     tushare_datetime_format = "%Y-%m-%d"
     code = str(row['code'])
@@ -161,7 +153,7 @@ def tu_get_detailed_df(row, start_date, end_date, adjust, database_path):
     code_file_path = database_path + code + ".csv"  
     res_df.to_csv(code_file_path, index=False)
     return  res_df
-    
+
 def sync_detail( row, poolDict, start_date, end_date, adjust, database_path):
     code = str(row['code'])
     poolDict[code] = tu_get_detailed_df(row, start_date, end_date, adjust, database_path)
@@ -184,102 +176,41 @@ def get_detailed_df_with_pool(last_sync_date, current_sync_date):
     
     return poolDict
 
-def macd_filter(code):
-    df = detailed_dfs[code]
-    close_column = df['close']
-    open_column = df['open']
-    dif = df['dif']
-    macd = df['macd']
-    try:
-        if (close_column[0] > open_column[0]) and dif[0] < 0 and macd[0] > 0:
-            return True
-    except:
-        return False
-    return False
-def volumne_filter(code):
-    if DEBUG:
-        print('*** volumn check for {} ***'.format(code))
-    df = detailed_dfs[code]
-    volume_column = df['volume']
-
-    try:
-        if volume_column[0] > (volume_column[1] * 3):
-            return True
-    except:
-        return False
-    return False
+def dump_to_py_obj(code_list, list_df, detailed_dfs):
+    py_obj = {}
+    for i in range(len(code_list)):
+        code = code_list[i]
+        df = detailed_dfs[code]
+        df = df.head(30).iloc[::-1]
+        
+        stock_info = {}
+                
+        date_list = [datetime.datetime.strftime(d, datetime_format) for d in df['date'].to_list()]
+        stock_info['date'] = date_list
+        
+        for item in ['name', 'prefix']:
+            item_content = list_df[list_df['code']==code][item].iloc[0]
+            stock_info[item] = item_content
+        
+        for item in ['open', 'high', 'low', 'close', 'dif', 'dea', 'macd', 'volume']:
+            item_list = df[item].to_numpy().tolist()
+            stock_info[item] = item_list
+            
+        py_obj[code] = stock_info
+    return py_obj        
     
-def dumpToJson(code_list, list_df, detailed_dfs):
+def dumpToJson(code_list, list_df, detailed_dfs):    
+    py_obj = dump_to_py_obj(code_list, list_df, detailed_dfs)
+
     dump_folder = '../snapshot/'
     if (not os.path.exists(dump_folder)):
         os.makedirs(dump_folder)
     json_file = dump_folder + 'snapshot.json'
-    fout = open(json_file, "w", encoding='utf-8')
-    fout.write('{\n')
-    lst_len = len(code_list)
-    for i in range(lst_len):
-        code = code_list[i]
-        df = detailed_dfs[code]
-        if len(df) < 40:
-            continue
-        df = df.head(30).iloc[::-1]
-        
-        # use code as key, type is string
-        fout.write('\t"{}" : '.format(code))
-        fout.write('{\n')
-        # value as object
-        name = list_df[list_df['code']==code]['name'].iloc[0]
-        fout.write('\t\t"name" : "{}"'.format(name))
-        fout.write(',\n')
-        
-        prefix = list_df[list_df['code']==code]['prefix'].iloc[0]
-        fout.write('\t\t"prefix" : "{}"'.format(prefix))
-        fout.write(',\n')
-        
-        date_list = [datetime.datetime.strftime(d, datetime_format) for d in df['date'].to_list()]
-        fout.write('\t\t"date" : {}'.format(json.dumps(date_list)))
-        fout.write(',\n')
-        
-        open_list = df['open'].to_numpy().tolist()
-        fout.write('\t\t"open" : {}'.format(open_list))
-        fout.write(',\n')
-        
-        high_list = df['high'].to_numpy().tolist()
-        fout.write('\t\t"high" : {}'.format(high_list))
-        fout.write(',\n')
-        
-        low_list = df['low'].to_numpy().tolist()
-        fout.write('\t\t"low" : {}'.format(low_list))
-        fout.write(',\n')
-        
-        close = df['close'].to_numpy().tolist()
-        fout.write('\t\t"close" : {}'.format(close))
-        fout.write(',\n')
-        
-        dif = df['dif'].to_numpy().tolist()
-        fout.write('\t\t"dif" : {}'.format(dif))
-        fout.write(',\n')
-        
-        dea = df['dea'].to_numpy().tolist()
-        fout.write('\t\t"dea" : {}'.format(dea))
-        fout.write(',\n')
-        
-        macd = df['macd'].to_numpy().tolist()
-        fout.write('\t\t"macd" : {}'.format(macd))
-        fout.write(',\n')
-        
-        volume = df['volume'].to_numpy().tolist()
-        fout.write('\t\t"volume" : {}'.format(volume))        
-        fout.write('\n')
-        
-        if DEBUG:
-            print('i: {} / len: {}'.format(i, lst_len))
-        if (i == (lst_len - 1)):
-            fout.write("\t}\n")
-        else:
-            fout.write("\t},\n")
-    fout.write('}')
-    fout.close()
+    
+    with open(json_file, "w", encoding='utf-8') as fout:
+        json.dump(py_obj, fout, ensure_ascii = False)
+    
+    return
 
 __database_flag_file__ = 'last-sync-record.txt'
 datetime_format = "%Y/%m/%d"
@@ -330,12 +261,12 @@ def get_list_df():
     __list_file__ = "list.csv"
     list_file_path = get_database_path() + __list_file__
     if database_is_valid():
-        logging.info('*** sync lists from database ***')
+        print('*** sync lists from database ***')
         
         list_df = pd.read_csv(list_file_path)
         list_df['code'] = list_df['code'].apply(lambda x : format(str(x), '0>6'))
     else:
-        logging.info('*** sync lists from network ***')
+        print('*** sync lists from network ***')
         # out of date, sync and save to file    
         list_df = ak_get_list_df()
         list_df.to_csv(list_file_path, index=False)
@@ -344,7 +275,7 @@ def get_list_df():
 def get_detailed_dfs(list_df):
     detailed_dfs = {}
     if database_is_valid():
-        logging.info('*** sync details from database ***')
+        print('*** sync details from database ***')
         database_path = get_database_path()       
         for index, row in list_df.iterrows():
             code = row['code']
@@ -353,7 +284,7 @@ def get_detailed_dfs(list_df):
             code_df['date'] = pd.to_datetime(code_df['date'])
             detailed_dfs[code] = code_df
     else:
-        logging.info('*** sync details from network ***')
+        print('*** sync details from network ***')
         last_sync_date = database_last_sync_date()
         current_sync_date = datetime.datetime.now()
         detailed_dfs = get_detailed_df_with_pool(last_sync_date, current_sync_date)
@@ -361,10 +292,88 @@ def get_detailed_dfs(list_df):
     mark_database_valid()
     return detailed_dfs
 
-def get_realtime_dfs(list_df):
-    rt_dfs = tu_get_realtime_df()
-    return rt_dfs
+def tu_get_realtime_df():
+    df = ts.get_today_all()
+    df['volume'] = df['volume'] / 100
+    df['close'] = df['trade']
+    df['date'] = datetime.datetime.now().strftime(datetime_format)
+    df[['dif', 'dea', 'macd']] = 0
+    res_df = pd.DataFrame()
+    required_columns = ['date','code', 'open', 'high', 'low', 'close', 'volume', 'dif', 'dea', 'macd']
+    res_df[required_columns] = df[required_columns]
     
+    return res_df
+
+def tu_get_realtime_df_st(list_df):
+    res = pd.DataFrame()
+    res_dict = {}
+    for index, row in list_df.iterrows():
+        code = row['code']
+        df = ts.get_realtime_quotes(code)
+        res_dict[code] = df
+    res = pd.concat(list(res_dict.values()))
+    return res
+
+def sync_realtime(row, poolDict):
+    code = row['code']
+    df = ts.get_realtime_quotes(code)
+    poolDict[code] = df
+
+def tu_get_realtime_df_mt(list_df):
+    print('*** get realtime quotes ***')
+    pool = multiprocessing.Pool(multiprocessing.cpu_count())
+    manager = multiprocessing.Manager()
+    poolDict = manager.dict()
+    for index, row in list_df.iterrows():
+        pool.apply_async(func = sync_realtime, args = (row, poolDict))
+    pool.close()
+    pool.join()
+    res = pd.concat(list(poolDict.values()))
+    res[['dif', 'dea', 'macd']] = 0
+    res['volume'] = res['volume'].apply(lambda x : int(x) / 100)
+    res['close'] = res['price']
+    return res[['date','code', 'open', 'high', 'low', 'close', 'volume', 'dif', 'dea', 'macd']]
+
+def get_realtime_df():
+    rt_df = tu_get_realtime_df()
+    return rt_df
+
+def merge_dfs(detailed_dfs, realtime_df):
+    print('*** merging realtime df ***')
+    new_dfs = {}
+    for (code, df) in detailed_dfs.items():
+        row_df = realtime_df[realtime_df['code']==code]
+        new_df = pd.concat([row_df, df])
+        new_df.set_index(pd.Index(range(0, len(new_df.index))), inplace=True)        
+        new_dfs[code] = new_df[['date', 'open', 'high', 'low', 'close', 'volume', 'dif', 'dea', 'macd']]
+    return new_dfs
+    
+
+def macd_filter(detailed_dfs, code):
+    df = detailed_dfs[code]
+    close_column = df['close']
+    open_column = df['open']
+    dif = df['dif']
+    macd = df['macd']
+    try:
+        if (close_column[0] > open_column[0]) and dif[0] < 0 and macd[0] > 0:
+            return True
+    except:
+        return False
+    return False
+def volumne_filter(detailed_dfs, code):
+    if DEBUG:
+        print('*** volumn check for {} ***'.format(code))
+    df = detailed_dfs[code]
+    volume_column = df['volume']
+
+    try:
+        if volume_column[0] > (volume_column[1] * 3):
+            return True
+    except:
+        return False
+    return False
+
 ##############################################################################
 """
 main logic
@@ -380,12 +389,28 @@ detailed_dfs = {}
 # - sync database: check containing folder and last sync record
 if __name__ == "__main__":
     list_df = get_list_df()
-    detailed_dfs = get_detailed_dfs(list_df)
-
+    print('list has {} items\n'.format(len(list_df)))
     
+    time1 = time.time()
+    detailed_dfs = get_detailed_dfs(list_df)
+    time2 = time.time()
+    print('time: {}'.format(time2-time1))
+    print('history dfs has {} items\n'.format(len(detailed_dfs)))
+    
+    time1 = time.time()
+    realtime_df = tu_get_realtime_df_mt(list_df)
+    time2 = time.time()
+    print('time: {}'.format(time2-time1))
+    print('realtime df has {} items\n'.format(len(realtime_df)))
+
+    merged_dfs = merge_dfs(detailed_dfs, realtime_df)
+    print('merged dfs has {} items\n'.format(len(merged_dfs)))
+    
+    debug_file = getRoot() + 'debug.csv'
+    merged_dfs['600000'].to_csv(debug_file, index=False)
     # TODO: dump a snapshot of lists? details?
     
-    print('\n\n*** core calculation start ***')
+    print('\n*** core calculation start ***')
     ##############################################################################
     # - do calculation
     
@@ -398,7 +423,7 @@ if __name__ == "__main__":
     current = 0
     for index, row in list_df.iterrows():
         code = row['code']
-        if (all(map(lambda filer: filer(code), [macd_filter, volumne_filter]) )):
+        if (all(map(lambda filer: filer(merged_dfs, code), [macd_filter, volumne_filter]) )):
             candidates.append(code)
         if DEBUG:
             current += 1
