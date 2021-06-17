@@ -356,7 +356,7 @@ def macd_filter(detailed_dfs, code):
     dif = df['dif']
     macd = df['macd']
     try:
-        if (close_column[0] > open_column[0]) and dif[0] < 0 and macd[0] > 0:
+        if (close_column[0] > open_column[0]):
             return True
     except:
         return False
@@ -368,7 +368,7 @@ def volumne_filter(detailed_dfs, code):
     volume_column = df['volume']
 
     try:
-        if volume_column[0] > (volume_column[1] * 3):
+        if volume_column[0] > (volume_column[1] * 1.5):
             return True
     except:
         return False
