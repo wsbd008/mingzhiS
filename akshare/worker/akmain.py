@@ -373,6 +373,14 @@ def volumne_filter(detailed_dfs, code):
     except:
         return False
     return False
+def trim_list_df(list_df, detailed_dfs):
+    print('*** trim list df ***')
+    codes = list(detailed_dfs.keys())
+    list_df = list_df[list_df['code'].isin(codes)]
+    __list_file__ = "list.csv"
+    list_file_path = get_database_path() + __list_file__
+    list_df.to_csv(list_file_path, index=False)
+    return list_df
 
 ##############################################################################
 """
@@ -396,6 +404,9 @@ if __name__ == "__main__":
     time2 = time.time()
     print('time: {}'.format(time2-time1))
     print('history dfs has {} items\n'.format(len(detailed_dfs)))
+
+    list_df = trim_list_df(list_df, detailed_dfs)
+    print('list has {} items after trim\n'.format(len(list_df)))
     
     time1 = time.time()
     realtime_df = tu_get_realtime_df_mt(list_df)
