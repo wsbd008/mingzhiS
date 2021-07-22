@@ -104,14 +104,14 @@ def ak_get_detailed_df(row, start_date, end_date, adjust):
     res_df.set_index(pd.Index(range(0, len(res_df.index))), inplace=True)
     return  res_df
 
-def tu_get_detailed_df(row, start_date, end_date, adjust, database_path):
+def tu_get_detailed_df(row, start_date, end_date, adjust, database_path, ktype = 'D'):
     tushare_datetime_format = "%Y-%m-%d"
     code = str(row['code'])
     
     #df = ak.stock_zh_a_daily(symbol, start_date, end_date, adjust)
     start_date_str = start_date.strftime(tushare_datetime_format)
     end_date_str = end_date.strftime(tushare_datetime_format)
-    df = ts.get_hist_data(code, start_date_str, end_date_str)
+    df = ts.get_hist_data(code, start_date_str, end_date_str, ktype)
     # adjust index and date
     df['date'] = df.index
     df['date'] = pd.to_datetime(df['date'])
@@ -150,13 +150,15 @@ def tu_get_detailed_df(row, start_date, end_date, adjust, database_path):
     res_df = pd.concat([res_df, macd], axis=1)
     res_df.set_index(pd.Index(range(0, len(res_df.index))), inplace=True)    
     
-    code_file_path = database_path + code + ".csv"  
+    code_file_path = database_path + code + ktype + ".csv"  
     res_df.to_csv(code_file_path, index=False)
     return  res_df
 
 def sync_detail( row, poolDict, start_date, end_date, adjust, database_path):
-    code = str(row['code'])
-    poolDict[code] = tu_get_detailed_df(row, start_date, end_date, adjust, database_path)
+    for ktype in ['D', 'W', 'M']:
+        code = str(row['code'])
+        dict_key = code + ktype
+        poolDict[dict_key] = tu_get_detailed_df(row, start_date, end_date, adjust, database_path, ktype)
     return
 
 def get_detailed_df_with_pool(last_sync_date, current_sync_date):
@@ -180,7 +182,8 @@ def dump_to_py_obj(code_list, list_df, detailed_dfs):
     py_obj = {}
     for i in range(len(code_list)):
         code = code_list[i]
-        df = detailed_dfs[code]
+        dfs_key = code + 'D'
+        df = detailed_dfs[dfs_key]
         df = df.head(30).iloc[::-1]
         
         stock_info = {}
@@ -278,11 +281,12 @@ def get_detailed_dfs(list_df):
         print('*** sync details from database ***')
         database_path = get_database_path()       
         for index, row in list_df.iterrows():
-            code = row['code']
-            code_file_path = database_path + str(code) + ".csv"
-            code_df = pd.read_csv(code_file_path)
-            code_df['date'] = pd.to_datetime(code_df['date'])
-            detailed_dfs[code] = code_df
+            for ktype in ['D', 'W', 'M']:
+                code = row['code'] + ktype
+                code_file_path = database_path + str(code) + ".csv"
+                code_df = pd.read_csv(code_file_path)
+                code_df['date'] = pd.to_datetime(code_df['date'])
+                detailed_dfs[code] = code_df
     else:
         print('*** sync details from network ***')
         last_sync_date = database_last_sync_date()
@@ -347,20 +351,51 @@ def merge_dfs(detailed_dfs, realtime_df):
         new_df.set_index(pd.Index(range(0, len(new_df.index))), inplace=True)        
         new_dfs[code] = new_df[['date', 'open', 'high', 'low', 'close', 'volume', 'dif', 'dea', 'macd']]
     return new_dfs
-    
 
-def macd_filter(detailed_dfs, code):
-    df = detailed_dfs[code]
-    close_column = df['close']
-    open_column = df['open']
+def d_filter(detailed_dfs, code : str):
+    ck = code + 'D'
+    df = detailed_dfs[ck]
     dif = df['dif']
     macd = df['macd']
     try:
-        if (close_column[0] > open_column[0]):
+        if (macd[0] < 0 and macd[1] < 0 and dif[0] < 0 and (macd[0] - macd[1] > abs(macd[0]))):
             return True
+        else:
+            return False
     except:
         return False
-    return False
+def w_filter(detailed_dfs, code : str):
+    ck = code + 'W'
+    df = detailed_dfs[ck]
+    dif = df['dif']
+    macd = df['macd']
+    try:
+        if (macd[0] > 0 and macd[1] < 0 and dif[0] < 0):
+            return True
+        else:
+            return False
+    except:
+        return False    
+def m_filter(detailed_dfs, code : str):
+    return True
+    ck = code + 'M'
+    df = detailed_dfs[ck]
+    dif = df['dif']
+    macd = df['macd']
+    try:
+        if (macd[0] > 0 and macd[1] < 0 and dif[0] < 0):
+            return True
+        else:
+            return False
+    except:
+        return False   
+def macd_filter(detailed_dfs, code : str):
+    good = True
+    good = good and d_filter(detailed_dfs, code)
+    good = good and w_filter(detailed_dfs, code)
+    good = good and m_filter(detailed_dfs, code)
+    return good
+
 def volumne_filter(detailed_dfs, code):
     if DEBUG:
         print('*** volumn check for {} ***'.format(code))
@@ -396,7 +431,9 @@ list_df = pd.DataFrame()
 detailed_dfs = {}
 # - sync database: check containing folder and last sync record
 if __name__ == "__main__":
-    list_df = get_list_df()
+    list_df = get_list_df()    
+    if DEBUG:
+        list_df = list_df.head(10)
     print('list has {} items\n'.format(len(list_df)))
     
     time1 = time.time()
@@ -405,20 +442,21 @@ if __name__ == "__main__":
     print('time: {}'.format(time2-time1))
     print('history dfs has {} items\n'.format(len(detailed_dfs)))
 
-    list_df = trim_list_df(list_df, detailed_dfs)
-    print('list has {} items after trim\n'.format(len(list_df)))
+    # list_df = trim_list_df(list_df, detailed_dfs)
+    # print('list has {} items after trim\n'.format(len(list_df)))
     
-    time1 = time.time()
-    realtime_df = tu_get_realtime_df_mt(list_df)
-    time2 = time.time()
-    print('time: {}'.format(time2-time1))
-    print('realtime df has {} items\n'.format(len(realtime_df)))
+    # time1 = time.time()
+    # realtime_df = tu_get_realtime_df_mt(list_df)
+    # time2 = time.time()
+    # print('time: {}'.format(time2-time1))
+    # print('realtime df has {} items\n'.format(len(realtime_df)))
 
-    merged_dfs = merge_dfs(detailed_dfs, realtime_df)
-    print('merged dfs has {} items\n'.format(len(merged_dfs)))
+    # merged_dfs = merge_dfs(detailed_dfs, realtime_df)
+    # print('merged dfs has {} items\n'.format(len(merged_dfs)))
+    merged_dfs = detailed_dfs
     
-    debug_file = getRoot() + 'debug.csv'
-    merged_dfs['600000'].to_csv(debug_file, index=False)
+    #debug_file = getRoot() + 'debug.csv'
+    #merged_dfs['600000'].to_csv(debug_file, index=False)
     # TODO: dump a snapshot of lists? details?
     
     print('\n*** core calculation start ***')
@@ -434,7 +472,7 @@ if __name__ == "__main__":
     current = 0
     for index, row in list_df.iterrows():
         code = row['code']
-        if (all(map(lambda filer: filer(merged_dfs, code), [macd_filter, volumne_filter]) )):
+        if (all(map(lambda filer: filer(merged_dfs, code), [macd_filter]) )):
             candidates.append(code)
         if DEBUG:
             current += 1

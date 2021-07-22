@@ -12,7 +12,7 @@ from gevent import pywsgi
 
 ##logging.basicConfig(filename='myapp.log', format='%(asctime)s %(levelname)s:%(message)s')
 
-DEBUG = False
+DEBUG = True
 
 app = Flask(__name__)
 
