@@ -377,7 +377,6 @@ def w_filter(detailed_dfs, code : str):
     except:
         return False    
 def m_filter(detailed_dfs, code : str):
-    return True
     ck = code + 'M'
     df = detailed_dfs[ck]
     dif = df['dif']
@@ -393,7 +392,7 @@ def macd_filter(detailed_dfs, code : str):
     good = True
     good = good and d_filter(detailed_dfs, code)
     good = good and w_filter(detailed_dfs, code)
-    good = good and m_filter(detailed_dfs, code)
+    #good = good and m_filter(detailed_dfs, code)
     return good
 
 def volumne_filter(detailed_dfs, code):

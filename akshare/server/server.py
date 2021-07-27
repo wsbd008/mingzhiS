@@ -21,7 +21,7 @@ import pandas as pd
 
 ##logging.basicConfig(filename='myapp.log', format='%(asctime)s %(levelname)s:%(message)s')
 
-DEBUG = False
+DEBUG = 1            
 df_merge_mutex = threading.Lock()
 
 class db_cache:
@@ -105,7 +105,7 @@ class db_cache:
         txt = fout.getvalue()
         return txt
     
-dbc = db_cache()
+#dbc = db_cache()
 
 def producer():
     sleep_minites_after_one_sync = 5
@@ -181,16 +181,18 @@ def dump():
    return render_template('dump.html')
 
 @app.route('/snapshot.json')
-def get_snapshot():
-    # json_file = "../snapshot/snapshot.json"
-    # fin = open(json_file, "r", encoding='utf-8')
-    # json = fin.read()
-    json = dbc.get_result_json_str()
-    return json
+def get_snapshot():    
+    json_file = "../snapshot/snapshot.json"
+    with open(json_file, "r", encoding='utf-8') as fin:
+        res = fin.read()
+        py_obj = json.loads(res)
+        print(py_obj)
+    #json = dbc.get_result_json_str()
+    return res
 
 if __name__ == '__main__':
-    p = threading.Thread(target = producer)
-    p.start()
+    #p = threading.Thread(target = producer)
+    #p.start()
     
     if DEBUG:        
         app.run(debug = DEBUG)
